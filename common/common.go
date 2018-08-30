@@ -2,154 +2,238 @@
 package common
 
 import (
-	"strings"
+	"math/rand"
+	"time"
+
+	r3 "github.com/golang/geo/r3"
+	s2 "github.com/golang/geo/s2"
+
+	st "github.com/markus-wa/demoinfocs-golang/sendtables"
 )
 
-var eqNameToWeapon map[string]EquipmentElement
-
-var eqElementToName map[EquipmentElement]string
-
-func init() {
-	initEqNameToWeapon()
-	initEqElementToName()
+// DemoHeader contains information from a demo's header.
+type DemoHeader struct {
+	Filestamp       string  // aka. File-type, must be HL2DEMO
+	Protocol        int     // Should be 4
+	NetworkProtocol int     // Not sure what this is for
+	ServerName      string  // Server's 'hostname' config value
+	ClientName      string  // Usually 'GOTV Demo'
+	MapName         string  // E.g. de_cache, de_nuke, cs_office, etc.
+	GameDirectory   string  // Usually 'csgo'
+	PlaybackTime    float32 // Demo duration in seconds (= PlaybackTicks / Server's tickrate)
+	PlaybackTicks   int     // Game duration in ticks (= PlaybackTime * Server's tickrate)
+	PlaybackFrames  int     // Amount of 'frames' aka demo-ticks recorded (= PlaybackTime * Demo's recording rate)
+	SignonLength    int     // Length of the Signon package in bytes
 }
 
-func initEqNameToWeapon() {
-	eqNameToWeapon = make(map[string]EquipmentElement)
-
-	eqNameToWeapon["ak47"] = EqAK47
-	eqNameToWeapon["aug"] = EqAUG
-	eqNameToWeapon["awp"] = EqAWP
-	eqNameToWeapon["bizon"] = EqBizon
-	eqNameToWeapon["c4"] = EqBomb
-	eqNameToWeapon["deagle"] = EqDeagle
-	eqNameToWeapon["decoy"] = EqDecoy
-	eqNameToWeapon["decoygrenade"] = EqDecoy
-	eqNameToWeapon["decoyprojectile"] = EqDecoy
-	eqNameToWeapon["elite"] = EqDualBarettas
-	eqNameToWeapon["famas"] = EqFamas
-	eqNameToWeapon["fiveseven"] = EqFiveSeven
-	eqNameToWeapon["flashbang"] = EqFlash
-	eqNameToWeapon["g3sg1"] = EqG3SG1
-	eqNameToWeapon["galil"] = EqGalil
-	eqNameToWeapon["galilar"] = EqGalil
-	eqNameToWeapon["glock"] = EqGlock
-	eqNameToWeapon["hegrenade"] = EqHE
-	eqNameToWeapon["hkp2000"] = EqP2000
-	eqNameToWeapon["incgrenade"] = EqIncendiary
-	eqNameToWeapon["incendiarygrenade"] = EqIncendiary
-	eqNameToWeapon["m249"] = EqM249
-	eqNameToWeapon["m4a1"] = EqM4A4
-	eqNameToWeapon["mac10"] = EqMac10
-	eqNameToWeapon["mag7"] = EqSwag7
-	eqNameToWeapon["molotov"] = EqMolotov
-	eqNameToWeapon["molotovgrenade"] = EqMolotov
-	eqNameToWeapon["molotovprojectile"] = EqMolotov
-	eqNameToWeapon["mp7"] = EqMP7
-	eqNameToWeapon["mp9"] = EqMP9
-	eqNameToWeapon["negev"] = EqNegev
-	eqNameToWeapon["nova"] = EqNova
-	eqNameToWeapon["p250"] = EqP250
-	eqNameToWeapon["p90"] = EqP90
-	eqNameToWeapon["sawedoff"] = EqSawedOff
-	eqNameToWeapon["scar20"] = EqScar20
-	eqNameToWeapon["sg556"] = EqSG556
-	eqNameToWeapon["smokegrenade"] = EqSmoke
-	eqNameToWeapon["smokegrenadeprojectile"] = EqSmoke
-	eqNameToWeapon["taser"] = EqZeus
-	eqNameToWeapon["tec9"] = EqTec9
-	eqNameToWeapon["ump45"] = EqUMP
-	eqNameToWeapon["xm1014"] = EqXM1014
-	eqNameToWeapon["m4a1_silencer"] = EqM4A1
-	eqNameToWeapon["m4a1_silencer_off"] = EqM4A1
-	eqNameToWeapon["cz75a"] = EqCZ
-	eqNameToWeapon["usp"] = EqUSP
-	eqNameToWeapon["usp_silencer"] = EqUSP
-	eqNameToWeapon["usp_silencer_off"] = EqUSP
-	eqNameToWeapon["world"] = EqWorld
-	eqNameToWeapon["inferno"] = EqIncendiary
-	eqNameToWeapon["revolver"] = EqRevolver
-	eqNameToWeapon["vest"] = EqKevlar
-	eqNameToWeapon["vesthelm"] = EqHelmet
-	eqNameToWeapon["defuser"] = EqDefuseKit
-
-	// These don't exist and / or used to crash the game with the give command
-	eqNameToWeapon["scar17"] = EqUnknown
-	eqNameToWeapon["sensorgrenade"] = EqUnknown
-	eqNameToWeapon["mp5navy"] = EqUnknown
-	eqNameToWeapon["p228"] = EqUnknown
-	eqNameToWeapon["scout"] = EqUnknown
-	eqNameToWeapon["sg550"] = EqUnknown
-	eqNameToWeapon["sg552"] = EqUnknown // This one still crashes the game :)
-	eqNameToWeapon["tmp"] = EqUnknown
-	eqNameToWeapon["worldspawn"] = EqUnknown
+// FrameRate returns the frame rate of the demo (frames / demo-ticks per second).
+// Not necessarily the tick-rate the server ran on during the game.
+func (h DemoHeader) FrameRate() float32 {
+	return float32(h.PlaybackFrames) / h.PlaybackTime
 }
 
-func initEqElementToName() {
-	eqElementToName = make(map[EquipmentElement]string)
-	eqElementToName[EqAK47] = "AK-47"
-	eqElementToName[EqAUG] = "AUG"
-	eqElementToName[EqAWP] = "AWP"
-	eqElementToName[EqBizon] = "PP-Bizon"
-	eqElementToName[EqBomb] = "C4"
-	eqElementToName[EqDeagle] = "Desert Eagle"
-	eqElementToName[EqDecoy] = "Decoy Grenade"
-	eqElementToName[EqDualBarettas] = "Dual Barettas"
-	eqElementToName[EqFamas] = "FAMAS"
-	eqElementToName[EqFiveSeven] = "Five-SeveN"
-	eqElementToName[EqFlash] = "Flashbang"
-	eqElementToName[EqG3SG1] = "G3SG1"
-	eqElementToName[EqGalil] = "Galil AR"
-	eqElementToName[EqGlock] = "Glock-18"
-	eqElementToName[EqHE] = "HE Grenade"
-	eqElementToName[EqP2000] = "P2000"
-	eqElementToName[EqIncendiary] = "Incendiary Grenade"
-	eqElementToName[EqM249] = "M249"
-	eqElementToName[EqM4A4] = "M4A1"
-	eqElementToName[EqMac10] = "MAC-10"
-	eqElementToName[EqSwag7] = "MAG-7"
-	eqElementToName[EqMolotov] = "Molotov"
-	eqElementToName[EqMP7] = "MP7"
-	eqElementToName[EqMP9] = "MP9"
-	eqElementToName[EqNegev] = "Negev"
-	eqElementToName[EqNova] = "Nova"
-	eqElementToName[EqP250] = "p250"
-	eqElementToName[EqP90] = "P90"
-	eqElementToName[EqSawedOff] = "Sawed-Off"
-	eqElementToName[EqScar20] = "SCAR-20"
-	eqElementToName[EqSG553] = "SG 553"
-	eqElementToName[EqSmoke] = "Smoke Grenade"
-	eqElementToName[EqScout] = "SSG 08"
-	eqElementToName[EqZeus] = "Zeus x27"
-	eqElementToName[EqTec9] = "Tec-9"
-	eqElementToName[EqUMP] = "UMP-45"
-	eqElementToName[EqXM1014] = "XM1014"
-	eqElementToName[EqM4A1] = "M4A1"
-	eqElementToName[EqCZ] = "CZ75 Auto"
-	eqElementToName[EqUSP] = "USP-S"
-	eqElementToName[EqWorld] = "World"
-	eqElementToName[EqRevolver] = "R8 Revolver"
-	eqElementToName[EqKevlar] = "Kevlar Vest"
-	eqElementToName[EqHelmet] = "Kevlar + Helmet"
-	eqElementToName[EqDefuseKit] = "Defuse Kit"
-	eqElementToName[EqKnife] = "Knife"
-	eqElementToName[EqUnknown] = "UNKNOWN"
+// FrameTime returns the time a frame / demo-tick takes in seconds.
+func (h DemoHeader) FrameTime() time.Duration {
+	return time.Duration(h.PlaybackTime / float32(h.PlaybackFrames) * float32(time.Second))
 }
 
-// MapEquipment creates an EquipmentElement from the name of the weapon / equipment.
-func MapEquipment(eqName string) EquipmentElement {
-	eqName = strings.TrimPrefix(eqName, weaponPrefix)
+// TickRate returns the tick-rate the server ran on during the game.
+// VolvoPlx128TixKTnxBye
+func (h DemoHeader) TickRate() float32 {
+	return float32(h.PlaybackTicks) / h.PlaybackTime
+}
 
-	var wep EquipmentElement
-	if strings.Contains(eqName, "knife") || strings.Contains(eqName, "bayonet") {
-		wep = EqKnife
-	} else {
-		// If the eqName isn't known it will be EqUnknown as that is the default value for EquipmentElement
-		var ok bool
-		if wep, ok = eqNameToWeapon[eqName]; !ok {
-			// TODO: Return error / warning for unmapped weapons
-		}
+// TickTime returns the time a single tick takes in seconds.
+func (h DemoHeader) TickTime() time.Duration {
+	return time.Duration(h.PlaybackTime / float32(h.PlaybackTicks) * float32(time.Second))
+}
+
+// Team is the type for the various TeamXYZ constants.
+type Team byte
+
+// Team constants give information about which team a player is on.
+const (
+	TeamUnassigned Team = iota
+	TeamSpectators
+	TeamTerrorists
+	TeamCounterTerrorists
+)
+
+// Player contains mostly game-relevant player information.
+type Player struct {
+	SteamID                     int64     // int64 representation of the User's Steam ID
+	Position                    r3.Vector // In-game coordinates. Like the one you get from cl_showpos 1
+	LastAlivePosition           r3.Vector // The location where the player was last alive. Should be equal to Position if the player is still alive.
+	Velocity                    r3.Vector // Movement velocity
+	EntityID                    int       // The ID of the player-entity, see Entity field
+	UserID                      int       // Mostly used in game-events to address this player
+	Name                        string    // Steam / in-game user name
+	Hp                          int
+	Armor                       int
+	Money                       int
+	CurrentEquipmentValue       int
+	FreezetimeEndEquipmentValue int
+	RoundStartEquipmentValue    int
+	ActiveWeaponID              int                // Used internally to set the active weapon, see ActiveWeapon()
+	RawWeapons                  map[int]*Equipment // All weapons the player is currently carrying
+	AmmoLeft                    [32]int            // Ammo left in the various weapons, index corresponds to key of RawWeapons
+	Entity                      *st.Entity
+	AdditionalPlayerInformation *AdditionalPlayerInformation // Mostly scoreboard information such as kills, deaths, etc.
+	ViewDirectionX              float32
+	ViewDirectionY              float32
+	FlashDuration               float32 // How long this player is flashed for from now on
+	Team                        Team
+	IsBot                       bool
+	IsDucking                   bool
+	HasDefuseKit                bool
+	HasHelmet                   bool
+}
+
+// IsAlive returns true if the Hp of the player are > 0.
+func (p *Player) IsAlive() bool {
+	return p.Hp > 0
+}
+
+// ActiveWeapon returns the currently active / equipped weapon of the player.
+func (p *Player) ActiveWeapon() *Equipment {
+	return p.RawWeapons[p.ActiveWeaponID]
+}
+
+// Weapons returns all weapons in the player's possession.
+func (p *Player) Weapons() []*Equipment {
+	res := make([]*Equipment, 0, len(p.RawWeapons))
+	for _, w := range p.RawWeapons {
+		res = append(res, w)
+	}
+	return res
+}
+
+// AdditionalPlayerInformation contains mostly scoreboard information.
+type AdditionalPlayerInformation struct {
+	Kills          int
+	Deaths         int
+	Assists        int
+	Score          int
+	MVPs           int
+	Ping           int
+	ClanTag        string
+	TotalCashSpent int
+}
+
+// NewPlayer creates a *Player with an initialized equipment map.
+//
+// Intended for internal use only.
+func NewPlayer() *Player {
+	return &Player{RawWeapons: make(map[int]*Equipment)}
+}
+
+// GrenadeProjectile is a grenade thrown intentionally by a player. It is used to track grenade projectile
+// positions between the time at which they are thrown and until they detonate.
+type GrenadeProjectile struct {
+	EntityID   int
+	Weapon     EquipmentElement
+	Thrower    *Player // Always seems to be the same as Owner, even if the grenade was picked up
+	Owner      *Player // Always seems to be the same as Thrower, even if the grenade was picked up
+	Position   r3.Vector
+	Trajectory []r3.Vector // List of all known locations of the grenade up to the current point
+
+	// uniqueID is used to distinguish different grenades (which potentially have the same, reused entityID) from each other.
+	uniqueID int64
+}
+
+// UniqueID returns the unique id of the grenade.
+// The unique id is a random int generated internally by this library and can be used to differentiate
+// grenades from each other. This is needed because demo-files reuse entity ids.
+func (g GrenadeProjectile) UniqueID() int64 {
+	return g.uniqueID
+}
+
+// NewGrenadeProjectile creates a grenade projectile and sets the Unique-ID.
+//
+// Intended for internal use only.
+func NewGrenadeProjectile() *GrenadeProjectile {
+	return &GrenadeProjectile{uniqueID: rand.Int63()}
+}
+
+// Inferno is a list of Fires with helper functions.
+// Also contains already extinguished fires.
+//
+// See also: Inferno.Active() and Fire.IsBurning
+type Inferno struct {
+	EntityID int
+	Fires    []*Fire
+
+	// uniqueID is used to distinguish different infernos (which potentially have the same, reused entityID) from each other.
+	uniqueID int64
+}
+
+// Fire is a component of an Inferno.
+type Fire struct {
+	r3.Vector
+
+	IsBurning bool
+}
+
+// Active returns an Inferno containing only the active fires of the original.
+// The returned Inferno will have the same Unique-ID as the original.
+func (inf Inferno) Active() Inferno {
+	res := Inferno{
+		uniqueID: inf.uniqueID,
+	}
+	res.Fires = make([]*Fire, 0, len(inf.Fires))
+	for i := range inf.Fires {
+		res.Fires = append(res.Fires, inf.Fires[i])
+	}
+	return res
+}
+
+// ConvexHull2D returns the 2D convex hull of all the fires in the inferno.
+// Useful for drawing on 2D maps.
+func (inf Inferno) ConvexHull2D() *s2.Loop {
+	q := s2.NewConvexHullQuery()
+	for i := range inf.Fires {
+		q.AddPoint(s2.Point{
+			Vector: r3.Vector{
+				X: inf.Fires[i].Vector.X,
+				Y: inf.Fires[i].Vector.Y,
+				Z: 1,
+			},
+		})
+	}
+	return q.ConvexHull()
+}
+
+// ConvexHull3D returns the 3D convex hull of all the fires in the inferno.
+func (inf Inferno) ConvexHull3D() *s2.Loop {
+	q := s2.NewConvexHullQuery()
+	for i := range inf.Fires {
+		q.AddPoint(s2.Point{Vector: inf.Fires[i].Vector})
+	}
+	return q.ConvexHull()
+}
+
+// NewInferno creates a inferno and sets the Unique-ID.
+//
+// Intended for internal use only.
+func NewInferno() *Inferno {
+	return &Inferno{uniqueID: rand.Int63()}
+}
+
+// Bomb tracks the bomb's position, and the player carrying it, if any.
+type Bomb struct {
+	// Intended for internal use only. Use Position() instead.
+	// Contains the last location of the dropped or planted bomb.
+	LastOnGroundPosition r3.Vector
+	Carrier              *Player
+}
+
+// Position returns the current position of the bomb.
+// This is either the position of the player holding it
+// or LastOnGroundPosition if it's dropped or planted.
+func (b Bomb) Position() r3.Vector {
+	if b.Carrier != nil {
+		return b.Carrier.Position
 	}
 
-	return wep
+	return b.LastOnGroundPosition
 }
