@@ -312,7 +312,7 @@ func (p *Parser) bindGrenadeProjectiles(entity *st.Entity) {
 	p.gameState.grenadeProjectiles[entityID] = proj
 
 	entity.OnCreateFinished(func() {
-		p.eventDispatcher.Dispatch(events.NadeProjectileThrownEvent{
+		p.eventDispatcher.Dispatch(events.GrenadeProjectileThrow{
 			Projectile: proj,
 		})
 	})
@@ -346,7 +346,7 @@ func (p *Parser) bindGrenadeProjectiles(entity *st.Entity) {
 	if bounceProp != nil {
 		bounceProp.OnUpdate(func(val st.PropertyValue) {
 			if val.IntVal != 0 {
-				p.eventDispatcher.Dispatch(events.NadeProjectileBouncedEvent{
+				p.eventDispatcher.Dispatch(events.GrenadeProjectileBounce{
 					Projectile: proj,
 					BounceNr:   val.IntVal,
 				})
@@ -363,7 +363,7 @@ func (p *Parser) nadeProjectileDestroyed(proj *common.GrenadeProjectile) {
 		return
 	}
 
-	p.eventDispatcher.Dispatch(events.NadeProjectileDestroyedEvent{
+	p.eventDispatcher.Dispatch(events.GrenadeProjectileDestroy{
 		Projectile: proj,
 	})
 
@@ -416,7 +416,7 @@ func (p *Parser) bindNewInferno(entity *st.Entity) {
 	p.gameState.infernos[entityID] = inf
 
 	entity.OnCreateFinished(func() {
-		p.eventDispatcher.Dispatch(events.InfernoStartedEvent{
+		p.eventDispatcher.Dispatch(events.InfernoStart{
 			Inferno: inf,
 		})
 	})
@@ -453,7 +453,7 @@ func (p *Parser) infernoExpired(inf *common.Inferno) {
 		return
 	}
 
-	p.eventDispatcher.Dispatch(events.InfernoExpiredEvent{
+	p.eventDispatcher.Dispatch(events.InfernoExpire{
 		Inferno: inf,
 	})
 
